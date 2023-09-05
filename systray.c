@@ -1,5 +1,4 @@
 /*
- *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU Lesser General Public License as published by
  * the Free Software Foundation.
@@ -12,61 +11,29 @@
  * You should have received a copy of the GNU Lesser General Public License
  * along with this program; if not, see <http://www.gnu.org/licenses/>.
  *
- *
  * Authors:
  *		Serghei Amelian <serghei@amelian.ro>
+ *		Ivan Korytov <toreonify@outlook.com>
  *
  * Copyright (C) 2021 Serghei Amelian
- *
+ * Copyright (C) 2023 Ivan Korytov
  */
 
-#include <gmodule.h>
-#include <gtk/gtk.h>
-#include <gdk/gdkx.h>
-#include <shell/e-shell.h>
-#include <shell/e-shell-view.h>
-#include <shell/e-shell-window.h>
-#include <mail/em-folder-tree.h>
-#include <libebackend/libebackend.h>
-#include <libxapp/xapp-status-icon.h>
-
-typedef struct _ESystray ESystray;
-typedef struct _ESystrayClass ESystrayClass;
-
-struct _ESystray {
-        EExtension parent;
-};
-
-struct _ESystrayClass {
-        EExtensionClass parent_class;
-};
-
-
-static XAppStatusIcon *status_icon = 0;
-
-/* Module Entry Points */
-void e_module_load (GTypeModule *type_module);
-void e_module_unload (GTypeModule *type_module);
+#include "systray.h"
 
 /* Forward Declarations */
 GType e_systray_get_type (void);
-
 G_DEFINE_DYNAMIC_TYPE (ESystray, e_systray, E_TYPE_EXTENSION)
 
 static gboolean
-on_widget_deleted(GtkWidget *widget, GdkEvent *event, gpointer data)
+on_window_close_alert(GtkWindow *window, GdkEvent *event, GtkMenuItem * item)
 {
-
-}
-
-static gboolean
-on_window_close_alert(GtkWindow *window, GdkEvent *event, gpointer data)
-{
-    if(event->type == GDK_DELETE)
+    if (event->type == GDK_DELETE)
     {
-        gtk_window_iconify(window);
-        gtk_window_set_skip_taskbar_hint(window, TRUE);
-        gtk_window_set_skip_pager_hint(window, TRUE);
+        gtk_widget_hide((GtkWidget*) window);
+
+        gtk_menu_item_set_label(item, _D("Show"));
+
         return TRUE;
     }
 
@@ -74,64 +41,24 @@ on_window_close_alert(GtkWindow *window, GdkEvent *event, gpointer data)
 }
 
 static gboolean
-on_activate(GtkWindow *window, gpointer user_data)
+on_activate(GtkMenuItem *item, ESystrayPrivate* priv)
 {
-    gboolean is_active = gtk_window_is_active(window);
-
-    g_print("is_active: %d\n", is_active);
-
-    if(is_active)
+    if (gtk_widget_is_visible((GtkWidget*) priv->window))
     {
-        gtk_window_iconify(window);
-        gtk_window_set_skip_taskbar_hint(window, TRUE);
-        gtk_window_set_skip_pager_hint(window, TRUE);
+        gtk_widget_hide((GtkWidget*) priv->window);
+
+        gtk_menu_item_set_label(item, _D("Show"));
     }
     else
     {
-        gtk_window_present_with_time(window, gdk_x11_get_server_time(gtk_widget_get_window(GTK_WIDGET(window))));
-        gtk_window_set_skip_taskbar_hint(window, FALSE);
-        gtk_window_set_skip_pager_hint(window, FALSE);
+        gtk_widget_show((GtkWidget*) priv->window);
+        gtk_window_present_with_time(priv->window, gdk_x11_get_server_time(gtk_widget_get_window(GTK_WIDGET(priv->window))));
+
+        gtk_menu_item_set_label(item, _D("Minimize"));
     }
-
-    //g_print("PTR TO WINDOW: %p\n", window);
-
-    //gtk_window_present_with_time(window, gdk_x11_get_server_time(gtk_widget_get_window(window)));
-    //gdk_window_show(gtk_widget_get_window(window));
-    //gtk_window_present(window);
-
-    //gdk_window_focus(window, 42);
 
     return TRUE;
 }
-
-
-static gboolean
-on_shell_event(EShell *shell, gpointer event_data, gpointer user_data)
-{
-    g_print("INFO: shell event %p!!!\n", event_data);
-
-    return FALSE;
-}
-
-
-void
-on_shell_view_created(EShellWindow *shell_window,
-                           EShellView   *shell_view,
-                           gpointer      user_data)
-{
-    g_print("INFO: on_shell_view_created! %s\n", e_shell_view_get_name(shell_view));
-}
-
-void
-on_folder_selected(EMFolderTree *folder_tree,
-                         CamelStore *store,
-                         const gchar *folder_name,
-                         CamelFolderInfoFlags flags)
-
-{
-    g_print("INFO: folder selected: %s\n", folder_name);
-}
-
 
 gboolean
 get_total_unread_messages(GtkTreeModel *model,
@@ -139,87 +66,179 @@ get_total_unread_messages(GtkTreeModel *model,
                                 GtkTreeIter  *iter,
                                 gpointer user_data)
 {
-    guint unread;
+    guint unread = 0;
+    guint* total_unread_messages = (guint*) user_data;
+
     gtk_tree_model_get(model, iter, COL_UINT_UNREAD, &unread, -1);
 
-    guint *total_unread_messages = user_data;
     if(unread > 0)
         *total_unread_messages += unread;
 
     return FALSE;
 }
 
-
 void
 on_unread_updated(MailFolderCache *folder_cache,
                        CamelStore *store,
                        const gchar *folder_name,
                        gint unread_messages,
-                       GtkTreeModel *model)
+                       ESystrayPrivate* priv)
 {
     int total_unread_messages = 0;
-    gtk_tree_model_foreach(model, get_total_unread_messages, &total_unread_messages);
+    gtk_tree_model_foreach(priv->model, get_total_unread_messages, &total_unread_messages);
 
-    if(total_unread_messages)
+    if (total_unread_messages > 0)
     {
-        gchar *num = g_strdup_printf("%i", total_unread_messages);
-        xapp_status_icon_set_label(status_icon, num);
+        gchar *num = g_strdup_printf(_DN("%d unread message", "%d unread messages", total_unread_messages), total_unread_messages);
+
+        status_notifier_item_set_from_icon_name (priv->sn, STATUS_NOTIFIER_ICON, "mail-unread-new");
+        status_notifier_item_set_tooltip_body (priv->sn, num);
+
         g_free(num);
     }
     else
-        xapp_status_icon_set_label(status_icon, "");
+    {
+        status_notifier_item_set_from_icon_name (priv->sn, STATUS_NOTIFIER_ICON, "mail-unread");
+        status_notifier_item_set_tooltip_body (priv->sn, _D("No unread messages"));
+    }
 }
 
+static gboolean
+menu_quit_click(GtkWidget *window, gpointer user_data)
+{
+    EShell *shell = e_shell_get_default();
+
+    e_shell_quit(shell, E_SHELL_QUIT_ACTION);
+}
+
+static gboolean
+sn_menu (StatusNotifierItem *sn, gint x, gint y, ESystrayPrivate* priv)
+{
+    if (!priv->menu)
+    {
+        g_object_ref_sink (priv->menu);
+    }
+
+    /* All of that because gtk_menu_popup is deprecated */
+    /* and GdkEvent is not passed by StatusNotifier */
+    GdkEvent* event = gdk_event_new(GDK_BUTTON_PRESS);
+    GdkWindow *gdk_window = gtk_widget_get_window(GTK_WIDGET(priv->window));
+    GdkSeat* seat = gdk_display_get_default_seat(gdk_display_get_default());
+
+    ((GdkEventButton*)event)->window = gdk_window;
+    ((GdkEventButton*)event)->device = gdk_seat_get_pointer(seat);
+
+    gtk_menu_popup_at_pointer (priv->menu, event);
+
+    return TRUE;
+}
+
+static gboolean
+sn_activate (ESystrayPrivate* priv)
+{
+    return on_activate(priv->visibility_item, priv);
+}
+
+
+/* ESystray methods */
+static void
+e_systray_init (ESystray *extension)
+{
+}
 
 static void
 e_systray_constructed (GObject *object)
 {
-        EExtensible *extensible;
+        ESystray* extension = NULL;
+
+        /* Chain up to parent's method. */
+        G_OBJECT_CLASS (e_systray_parent_class)->constructed (object);
+
+        extension = (ESystray*) E_EXTENSION (object);
+        extension->priv = malloc(sizeof(ESystrayPrivate));
 
         /* This retrieves the EShell instance we're extending. */
-        extensible = e_extension_get_extensible (E_EXTENSION(object));
-
+        EExtensible *extensible = e_extension_get_extensible (E_EXTENSION(extension));
         EShellWindow *shell_window = E_SHELL_WINDOW(extensible);
-
-        g_signal_connect_after(G_OBJECT(extensible),
-                "event", G_CALLBACK(on_window_close_alert), NULL);
-
-        //gtk_window_iconify(extensible);
-
         GtkWindow *window = GTK_WINDOW(extensible);
 
-        status_icon = xapp_status_icon_new();
-        xapp_status_icon_set_icon_name(status_icon, "evolution");
+        extension->priv->window = window;
 
-        g_signal_connect_swapped(status_icon, "activate", G_CALLBACK(on_activate), window);
+        /* Create StatusNotifier */
+        extension->priv->sn = g_object_new (STATUS_NOTIFIER_TYPE_ITEM,
+            "id",               "evolution-systray",
+            "category",         STATUS_NOTIFIER_CATEGORY_APPLICATION_STATUS,
+            "status",           STATUS_NOTIFIER_STATUS_ACTIVE,
+            "title",            "Evolution",
+            "item-is-menu",     false,
+            NULL);
 
+        status_notifier_item_set_tooltip_title (extension->priv->sn, "Evolution");
+        status_notifier_item_set_tooltip_body (extension->priv->sn, _D("No unread messages"));
+
+        /* Create context menu */
+        GtkMenu* menu = (GtkMenu*) gtk_menu_new();
+
+        GtkWidget *item = gtk_menu_item_new_with_label (_D("Minimize"));
+        extension->priv->visibility_item = (GtkMenuItem*) item;
+
+        g_signal_connect(item, "activate", G_CALLBACK(on_activate), extension->priv);
+        gtk_menu_shell_append (GTK_MENU_SHELL (menu), item);
+        gtk_widget_show(item);
+
+        g_signal_connect_after(G_OBJECT(extensible), "event", G_CALLBACK(on_window_close_alert), item);
+
+        item = gtk_separator_menu_item_new ();
+        gtk_menu_shell_append (GTK_MENU_SHELL (menu), item);
+        gtk_widget_show(item);
+
+        item = gtk_menu_item_new_with_label (_D("Quit"));
+        g_signal_connect (item, "activate", G_CALLBACK (menu_quit_click), extension->priv->sn);
+        gtk_menu_shell_append (GTK_MENU_SHELL (menu), item);
+        gtk_widget_show(item);
+
+        /* Set context menu for tray icon */
+        extension->priv->menu = menu;
+        status_notifier_item_set_context_menu (extension->priv->sn, (GObject *) extension->priv->menu);
+        g_signal_connect (extension->priv->sn, "context-menu", (GCallback) sn_menu, extension->priv);
+
+        // TODO: error handler if creation of tray icon fails
+        // g_signal_connect (extension->priv->sn, "registration-failed", (GCallback) sn_reg_failed, NULL);
+
+        /* Enable tray icon */
+        g_signal_connect_swapped (extension->priv->sn, "activate", (GCallback) sn_activate, extension->priv);
+        status_notifier_item_register (extension->priv->sn);
+
+        /* Connect callback to Evolution for monitoring unread messages count */
         EShell *shell = e_shell_window_get_shell(shell_window);
-        g_signal_connect(G_OBJECT(shell), "event", G_CALLBACK(on_shell_event), NULL);
 
         EShellView *shell_view = e_shell_window_get_shell_view(shell_window, "mail");
         EShellSidebar *shell_sidebar = e_shell_view_get_shell_sidebar (shell_view);
 
         EMFolderTree *folder_tree;
         g_object_get (shell_sidebar, "folder-tree", &folder_tree, NULL);
-        g_signal_connect(G_OBJECT(folder_tree), "folder-selected", G_CALLBACK(on_folder_selected), NULL);
-
 
         GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(folder_tree));
         EMailSession *email_session = em_folder_tree_model_get_session(EM_FOLDER_TREE_MODEL(model));
         MailFolderCache *mail_folder_cache = e_mail_session_get_folder_cache(email_session);
 
-        g_signal_connect(G_OBJECT(mail_folder_cache), "folder-unread-updated", G_CALLBACK(on_unread_updated), model);
+        extension->priv->model = model;
+
+        g_signal_connect(G_OBJECT(mail_folder_cache), "folder-unread-updated", G_CALLBACK(on_unread_updated), extension->priv);
 }
 
 static void
 e_systray_finalize (GObject *object)
 {
-        g_print ("Goodbye cruel world!\n");
+        ESystray* extension = (ESystray*) object;
+        g_object_unref (extension->priv->sn);
+        free(extension->priv);
 
         /* Chain up to parent's finalize() method. */
         G_OBJECT_CLASS (e_systray_parent_class)->finalize (object);
 }
 
+/* ESystrayClass methods */
 static void
 e_systray_class_init (ESystrayClass *class)
 {
@@ -241,16 +260,11 @@ e_systray_class_finalize (ESystrayClass *class)
 {
 }
 
-
-static void
-e_systray_init (ESystray *extension)
-{
-}
-
+/* Module Entry Points */
 G_MODULE_EXPORT void
 e_module_load (GTypeModule *type_module)
 {
-        e_systray_register_type (type_module);
+    e_systray_register_type (type_module);
 }
 
 G_MODULE_EXPORT void

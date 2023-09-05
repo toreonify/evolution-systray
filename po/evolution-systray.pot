@@ -1,0 +1,42 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2023-08-30 15:00+0300\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=CHARSET\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=INTEGER; plural=EXPRESSION;\n"
+
+#: systray.c:97
+#, c-format
+msgid "%d unread message"
+msgid_plural "%d unread messages"
+msgstr[0] "%d unread message"
+msgstr[1] "%d unread messages"
+
+#: systray.c:63 systray.c:177 systray.c:179
+msgid "Minimize"
+msgstr "Minimize"
+
+#: systray.c:107 systray.c:172 systray.c:174
+msgid "No unread messages"
+msgstr "No unread messages"
+
+#: systray.c:190 systray.c:192
+msgid "Quit"
+msgstr "Quit"
+
+#: systray.c:37 systray.c:55
+msgid "Show"
+msgstr "Show"
