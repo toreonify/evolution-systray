@@ -1,3 +1,7 @@
+prefix=/usr
+datadir=$(prefix)/share
+libdir=$(prefix)/lib
+
 all: module-systray.so po/ru/evolution-systray.mo
 
 CFLAGS := -fPIC $(shell pkg-config --cflags evolution-shell-3.0 statusnotifier)
@@ -21,8 +25,8 @@ po/evolution-systray.pot: systray.c
 .PHONY: install clean
 
 install: all
-	cp module-systray.so /usr/lib64/evolution/modules/
-	cp po/ru/*.mo /usr/share/locale/ru/LC_MESSAGES/
+	cp module-systray.so $(libdir)/evolution/modules/
+	cp po/ru/*.mo $(datadir)/locale/ru/LC_MESSAGES/
 
 clean:
 	rm -f systray.o module-systray.so po/ru/*.mo
