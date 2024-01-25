@@ -35,6 +35,8 @@
 
 #include <libebackend/libebackend.h>
 
+#include <camel/camel.h>
+
 #define _D(VA...) dgettext("evolution-systray", VA)
 #define _DN(VA...) dngettext("evolution-systray", VA)
 

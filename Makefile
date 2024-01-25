@@ -4,7 +4,7 @@ libdir=$(prefix)/lib
 
 all: module-systray.so po/ru/evolution-systray.mo
 
-CFLAGS := -fPIC $(shell pkg-config --cflags evolution-shell-3.0 statusnotifier)
+CFLAGS := -fPIC $(shell pkg-config --cflags evolution-shell-3.0 evolution-data-server-1.2 statusnotifier)
 LIBS := $(shell pkg-config --libs evolution-mail-3.0 statusnotifier)
 
 module-systray.so: systray.o

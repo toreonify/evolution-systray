@@ -67,11 +67,24 @@ get_total_unread_messages(GtkTreeModel *model,
                                 gpointer user_data)
 {
     guint unread = 0;
+    guint flags = 0;
+    gboolean is_draft = FALSE;
     guint* total_unread_messages = (guint*) user_data;
+
+    // is_draft available only for normal accounts to test if it's a Drafts folder
+    // It's unread count equals to all drafts in folder
+    gtk_tree_model_get(model, iter, COL_BOOL_IS_DRAFT, &is_draft, -1);
+    // For EWS acoounts, we can check flags
+    gtk_tree_model_get(model, iter, COL_UINT_FLAGS, &flags, -1);
+
+    if (is_draft || (flags & CAMEL_FOLDER_TYPE_MASK) == CAMEL_FOLDER_TYPE_DRAFTS)
+    {
+        return FALSE;
+    }
 
     gtk_tree_model_get(model, iter, COL_UINT_UNREAD, &unread, -1);
 
-    if(unread > 0)
+    if (unread > 0)
         *total_unread_messages += unread;
 
     return FALSE;
