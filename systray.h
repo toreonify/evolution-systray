@@ -45,23 +45,24 @@ typedef struct _ESystrayClass ESystrayClass;
 typedef struct _ESystrayPrivate ESystrayPrivate;
 
 struct _ESystray {
-        EExtension parent;
+    EExtension parent;
 
-        ESystrayPrivate* priv;
+    ESystrayPrivate* priv;
 };
 
 struct _ESystrayClass {
-        EExtensionClass parent_class;
+    EExtensionClass parent_class;
 };
 
 struct _ESystrayPrivate {
-        GtkWindow* window;
+    GtkWindow* window;
+    bool window_active;
 
-        StatusNotifierItem* sn;
-        GtkMenu* menu;
-        GtkMenuItem* visibility_item;
+    StatusNotifierItem* sn;
+    GtkMenu* menu;
+    GtkMenuItem* visibility_item;
 
-        GtkTreeModel *model;
+    GtkTreeModel *model;
 };
 
 /* Module Entry Points */

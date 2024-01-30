@@ -26,13 +26,28 @@ GType e_systray_get_type (void);
 G_DEFINE_DYNAMIC_TYPE (ESystray, e_systray, E_TYPE_EXTENSION)
 
 static gboolean
+on_window_state_event (GtkWidget *widget, GdkEventWindowState *event, ESystrayPrivate* priv)
+{
+    GdkWindow *gdk_window = gtk_widget_get_window(GTK_WIDGET(priv->window));
+    GdkWindowState state = gdk_window_get_state(gdk_window);
+    priv->window_active = !((state & GDK_WINDOW_STATE_WITHDRAWN) || (state & GDK_WINDOW_STATE_ICONIFIED) || !(state & GDK_WINDOW_STATE_FOCUSED));
+
+    if (!priv->window_active)
+    {
+        gtk_menu_item_set_label(priv->visibility_item, _D("Show"));
+    }
+    else
+    {
+        gtk_menu_item_set_label(priv->visibility_item, _D("Minimize"));
+    }
+}
+
+static gboolean
 on_window_close_alert(GtkWindow *window, GdkEvent *event, GtkMenuItem * item)
 {
     if (event->type == GDK_DELETE)
     {
         gtk_widget_hide((GtkWidget*) window);
-
-        gtk_menu_item_set_label(item, _D("Show"));
 
         return TRUE;
     }
@@ -43,18 +58,14 @@ on_window_close_alert(GtkWindow *window, GdkEvent *event, GtkMenuItem * item)
 static gboolean
 on_activate(GtkMenuItem *item, ESystrayPrivate* priv)
 {
-    if (gtk_widget_is_visible((GtkWidget*) priv->window))
+    if (priv->window_active)
     {
         gtk_widget_hide((GtkWidget*) priv->window);
-
-        gtk_menu_item_set_label(item, _D("Show"));
     }
     else
     {
         gtk_widget_show((GtkWidget*) priv->window);
         gtk_window_present_with_time(priv->window, gdk_x11_get_server_time(gtk_widget_get_window(GTK_WIDGET(priv->window))));
-
-        gtk_menu_item_set_label(item, _D("Minimize"));
     }
 
     return TRUE;
@@ -162,110 +173,111 @@ e_systray_init (ESystray *extension)
 static void
 e_systray_constructed (GObject *object)
 {
-        ESystray* extension = NULL;
+    ESystray* extension = NULL;
 
-        /* Chain up to parent's method. */
-        G_OBJECT_CLASS (e_systray_parent_class)->constructed (object);
+    /* Chain up to parent's method. */
+    G_OBJECT_CLASS (e_systray_parent_class)->constructed (object);
 
-        extension = (ESystray*) E_EXTENSION (object);
-        extension->priv = malloc(sizeof(ESystrayPrivate));
+    extension = (ESystray*) E_EXTENSION (object);
+    extension->priv = malloc(sizeof(ESystrayPrivate));
 
-        /* This retrieves the EShell instance we're extending. */
-        EExtensible *extensible = e_extension_get_extensible (E_EXTENSION(extension));
-        EShellWindow *shell_window = E_SHELL_WINDOW(extensible);
-        GtkWindow *window = GTK_WINDOW(extensible);
+    /* This retrieves the EShell instance we're extending. */
+    EExtensible *extensible = e_extension_get_extensible (E_EXTENSION(extension));
+    EShellWindow *shell_window = E_SHELL_WINDOW(extensible);
+    GtkWindow *window = GTK_WINDOW(extensible);
 
-        extension->priv->window = window;
+    extension->priv->window = window;
+    g_signal_connect(window, "window-state-event", G_CALLBACK(on_window_state_event), extension->priv);
 
-        /* Create StatusNotifier */
-        extension->priv->sn = g_object_new (STATUS_NOTIFIER_TYPE_ITEM,
-            "id",               "evolution-systray",
-            "category",         STATUS_NOTIFIER_CATEGORY_APPLICATION_STATUS,
-            "status",           STATUS_NOTIFIER_STATUS_ACTIVE,
-            "title",            "Evolution",
-            "item-is-menu",     false,
-            NULL);
+    /* Create StatusNotifier */
+    extension->priv->sn = g_object_new (STATUS_NOTIFIER_TYPE_ITEM,
+        "id",               "evolution-systray",
+        "category",         STATUS_NOTIFIER_CATEGORY_APPLICATION_STATUS,
+        "status",           STATUS_NOTIFIER_STATUS_ACTIVE,
+        "title",            "Evolution",
+        "item-is-menu",     false,
+        NULL);
 
-        status_notifier_item_set_tooltip_title (extension->priv->sn, "Evolution");
-        status_notifier_item_set_tooltip_body (extension->priv->sn, _D("No unread messages"));
+    status_notifier_item_set_tooltip_title (extension->priv->sn, "Evolution");
+    status_notifier_item_set_tooltip_body (extension->priv->sn, _D("No unread messages"));
 
-        /* Create context menu */
-        GtkMenu* menu = (GtkMenu*) gtk_menu_new();
+    /* Create context menu */
+    GtkMenu* menu = (GtkMenu*) gtk_menu_new();
 
-        GtkWidget *item = gtk_menu_item_new_with_label (_D("Minimize"));
-        extension->priv->visibility_item = (GtkMenuItem*) item;
+    GtkWidget *item = gtk_menu_item_new_with_label (_D("Minimize"));
+    extension->priv->visibility_item = (GtkMenuItem*) item;
 
-        g_signal_connect(item, "activate", G_CALLBACK(on_activate), extension->priv);
-        gtk_menu_shell_append (GTK_MENU_SHELL (menu), item);
-        gtk_widget_show(item);
+    g_signal_connect(item, "activate", G_CALLBACK(on_activate), extension->priv);
+    gtk_menu_shell_append (GTK_MENU_SHELL (menu), item);
+    gtk_widget_show(item);
 
-        g_signal_connect_after(G_OBJECT(extensible), "event", G_CALLBACK(on_window_close_alert), item);
+    g_signal_connect_after(G_OBJECT(extensible), "event", G_CALLBACK(on_window_close_alert), item);
 
-        item = gtk_separator_menu_item_new ();
-        gtk_menu_shell_append (GTK_MENU_SHELL (menu), item);
-        gtk_widget_show(item);
+    item = gtk_separator_menu_item_new ();
+    gtk_menu_shell_append (GTK_MENU_SHELL (menu), item);
+    gtk_widget_show(item);
 
-        item = gtk_menu_item_new_with_label (_D("Quit"));
-        g_signal_connect (item, "activate", G_CALLBACK (menu_quit_click), extension->priv->sn);
-        gtk_menu_shell_append (GTK_MENU_SHELL (menu), item);
-        gtk_widget_show(item);
+    item = gtk_menu_item_new_with_label (_D("Quit"));
+    g_signal_connect (item, "activate", G_CALLBACK (menu_quit_click), extension->priv->sn);
+    gtk_menu_shell_append (GTK_MENU_SHELL (menu), item);
+    gtk_widget_show(item);
 
-        /* Set context menu for tray icon */
-        extension->priv->menu = menu;
-        status_notifier_item_set_context_menu (extension->priv->sn, (GObject *) extension->priv->menu);
-        g_signal_connect (extension->priv->sn, "context-menu", (GCallback) sn_menu, extension->priv);
+    /* Set context menu for tray icon */
+    extension->priv->menu = menu;
+    status_notifier_item_set_context_menu (extension->priv->sn, (GObject *) extension->priv->menu);
+    g_signal_connect (extension->priv->sn, "context-menu", (GCallback) sn_menu, extension->priv);
 
-        // TODO: error handler if creation of tray icon fails
-        // g_signal_connect (extension->priv->sn, "registration-failed", (GCallback) sn_reg_failed, NULL);
+    // TODO: error handler if creation of tray icon fails
+    // g_signal_connect (extension->priv->sn, "registration-failed", (GCallback) sn_reg_failed, NULL);
 
-        /* Enable tray icon */
-        g_signal_connect_swapped (extension->priv->sn, "activate", (GCallback) sn_activate, extension->priv);
-        status_notifier_item_register (extension->priv->sn);
+    /* Enable tray icon */
+    g_signal_connect_swapped (extension->priv->sn, "activate", (GCallback) sn_activate, extension->priv);
+    status_notifier_item_register (extension->priv->sn);
 
-        /* Connect callback to Evolution for monitoring unread messages count */
-        EShell *shell = e_shell_window_get_shell(shell_window);
+    /* Connect callback to Evolution for monitoring unread messages count */
+    EShell *shell = e_shell_window_get_shell(shell_window);
 
-        EShellView *shell_view = e_shell_window_get_shell_view(shell_window, "mail");
-        EShellSidebar *shell_sidebar = e_shell_view_get_shell_sidebar (shell_view);
+    EShellView *shell_view = e_shell_window_get_shell_view(shell_window, "mail");
+    EShellSidebar *shell_sidebar = e_shell_view_get_shell_sidebar (shell_view);
 
-        EMFolderTree *folder_tree;
-        g_object_get (shell_sidebar, "folder-tree", &folder_tree, NULL);
+    EMFolderTree *folder_tree;
+    g_object_get (shell_sidebar, "folder-tree", &folder_tree, NULL);
 
-        GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(folder_tree));
-        EMailSession *email_session = em_folder_tree_model_get_session(EM_FOLDER_TREE_MODEL(model));
-        MailFolderCache *mail_folder_cache = e_mail_session_get_folder_cache(email_session);
+    GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(folder_tree));
+    EMailSession *email_session = em_folder_tree_model_get_session(EM_FOLDER_TREE_MODEL(model));
+    MailFolderCache *mail_folder_cache = e_mail_session_get_folder_cache(email_session);
 
-        extension->priv->model = model;
+    extension->priv->model = model;
 
-        g_signal_connect(G_OBJECT(mail_folder_cache), "folder-unread-updated", G_CALLBACK(on_unread_updated), extension->priv);
+    g_signal_connect(G_OBJECT(mail_folder_cache), "folder-unread-updated", G_CALLBACK(on_unread_updated), extension->priv);
 }
 
 static void
 e_systray_finalize (GObject *object)
 {
-        ESystray* extension = (ESystray*) object;
-        g_object_unref (extension->priv->sn);
-        free(extension->priv);
+    ESystray* extension = (ESystray*) object;
+    g_object_unref (extension->priv->sn);
+    free(extension->priv);
 
-        /* Chain up to parent's finalize() method. */
-        G_OBJECT_CLASS (e_systray_parent_class)->finalize (object);
+    /* Chain up to parent's finalize() method. */
+    G_OBJECT_CLASS (e_systray_parent_class)->finalize (object);
 }
 
 /* ESystrayClass methods */
 static void
 e_systray_class_init (ESystrayClass *class)
 {
-        GObjectClass *object_class;
-        EExtensionClass *extension_class;
+    GObjectClass *object_class;
+    EExtensionClass *extension_class;
 
-        object_class = G_OBJECT_CLASS (class);
-        object_class->constructed = e_systray_constructed;
-        object_class->finalize = e_systray_finalize;
+    object_class = G_OBJECT_CLASS (class);
+    object_class->constructed = e_systray_constructed;
+    object_class->finalize = e_systray_finalize;
 
-        /* Specify the GType of the class we're extending.
-         * The class must implement the EExtensible interface. */
-        extension_class = E_EXTENSION_CLASS (class);
-        extension_class->extensible_type = E_TYPE_SHELL_WINDOW;
+    /* Specify the GType of the class we're extending.
+     * The class must implement the EExtensible interface. */
+    extension_class = E_EXTENSION_CLASS (class);
+    extension_class->extensible_type = E_TYPE_SHELL_WINDOW;
 }
 
 static void
