@@ -1,0 +1,2 @@
+spec: .gear/evolution-systray.spec
+tar: . name=@name@-@version@

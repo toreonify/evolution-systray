@@ -25,6 +25,9 @@ po/evolution-systray.pot: systray.c
 .PHONY: install clean
 
 install: all
+	mkdir -p $(libdir)/evolution/modules/
+	mkdir -p $(datadir)/locale/ru/LC_MESSAGES/
+
 	cp module-systray.so $(libdir)/evolution/modules/
 	cp po/ru/*.mo $(datadir)/locale/ru/LC_MESSAGES/
 
