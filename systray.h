@@ -24,6 +24,7 @@
 
 #include <gtk/gtk.h>
 #include <gdk/gdkx.h>
+#include <gdk/gdkwayland.h>
 #include <glib/gi18n.h>
 #include <locale.h>
 #include <statusnotifier.h>

@@ -64,8 +64,18 @@ on_activate(GtkMenuItem *item, ESystrayPrivate* priv)
     }
     else
     {
-        gtk_widget_show((GtkWidget*) priv->window);
-        gtk_window_present_with_time(priv->window, gdk_x11_get_server_time(gtk_widget_get_window(GTK_WIDGET(priv->window))));
+#ifdef GDK_WINDOWING_WAYLAND
+        GdkWindow *gdk_window = gtk_widget_get_window(GTK_WIDGET(priv->window));
+        GdkWindowState state = gdk_window_get_state(gdk_window);
+
+        if (GDK_IS_WAYLAND_DISPLAY(gtk_widget_get_display(GTK_WIDGET(priv->window)))
+            && !(state & GDK_WINDOW_STATE_WITHDRAWN))
+        {
+            gtk_widget_hide((GtkWidget*) priv->window);
+        }
+#endif
+        gtk_window_deiconify(priv->window);
+        gtk_window_present_with_time(priv->window, g_get_monotonic_time () / 1000L);
     }
 
     return TRUE;
@@ -224,8 +234,13 @@ e_systray_constructed (GObject *object)
 
     /* Set context menu for tray icon */
     extension->priv->menu = menu;
-    status_notifier_item_set_context_menu (extension->priv->sn, (GObject *) extension->priv->menu);
-    g_signal_connect (extension->priv->sn, "context-menu", (GCallback) sn_menu, extension->priv);
+    bool dbusmenu_status = status_notifier_item_set_context_menu (extension->priv->sn, (GObject *) extension->priv->menu);
+
+    if (dbusmenu_status) {
+        status_notifier_item_set_item_is_menu (extension->priv->sn, TRUE);
+    } else {
+        g_signal_connect (extension->priv->sn, "context-menu", (GCallback) sn_menu, extension->priv);
+    }
 
     // TODO: error handler if creation of tray icon fails
     // g_signal_connect (extension->priv->sn, "registration-failed", (GCallback) sn_reg_failed, NULL);
